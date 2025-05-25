@@ -89,7 +89,7 @@ char * make_filename(const char * path, const char * dir, const char * file, con
 
     if (path)
     {
-        strncpy(&ret[pos], path, strlen(path));
+        strcpy(&ret[pos], path);
         pos     += strlen(path);
 #ifdef _WIN32
         ret[pos] = '\\';
@@ -102,7 +102,7 @@ char * make_filename(const char * path, const char * dir, const char * file, con
     {
         char *tmp_dir = strdup(dir);
         sanitize_filepath(tmp_dir);
-        strncpy(&ret[pos], tmp_dir, strlen(tmp_dir));
+        strcpy(&ret[pos], tmp_dir);
         pos     += strlen(tmp_dir);
 #ifdef _WIN32
         ret[pos] = '\\';
@@ -116,7 +116,7 @@ char * make_filename(const char * path, const char * dir, const char * file, con
     {
         char * tmp_file = strdup(file);
         sanitize_filename(tmp_file);
-        strncpy(&ret[pos], tmp_file, strlen(tmp_file));
+        strcpy(&ret[pos], tmp_file);
         pos += strlen(tmp_file);
         free(tmp_file);
     }
@@ -124,7 +124,7 @@ char * make_filename(const char * path, const char * dir, const char * file, con
     {
         ret[pos] = '.';
         pos++;
-        strncpy(&ret[pos], extension, strlen(extension));
+        strcpy(&ret[pos], extension);
         pos += strlen(extension);
     }
     ret[pos] = '\0';
@@ -201,14 +201,14 @@ char * parse_format(const char * format, int tracknum, const char * year, const 
             case 'A':
                 if (artist)
                 {
-                    strncpy(&ret[pos], artist, strlen(artist));
+                    strcpy(&ret[pos], artist);
                     pos += strlen(artist);
                 }
                 break;
             case 'L':
                 if (album)
                 {
-                    strncpy(&ret[pos], album, strlen(album));
+                    strcpy(&ret[pos], album);
                     pos += strlen(album);
                 }
                 break;
@@ -223,14 +223,14 @@ char * parse_format(const char * format, int tracknum, const char * year, const 
             case 'Y':
                 if (year)
                 {
-                    strncpy(&ret[pos], year, strlen(year));
+                    strcpy(&ret[pos], year);
                     pos += strlen(year);
                 }
                 break;
             case 'T':
                 if (title)
                 {
-                    strncpy(&ret[pos], title, strlen(title));
+                    strcpy(&ret[pos], title);
                     pos += strlen(title);
                 }
                 break;

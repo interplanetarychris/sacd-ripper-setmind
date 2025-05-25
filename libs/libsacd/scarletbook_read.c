@@ -537,6 +537,7 @@ static int scarletbook_read_area_toc(scarletbook_handle_t *handle, int area_idx)
         {
             area_tracklist_t *tracklist;
             tracklist = area->area_tracklist_time = (area_tracklist_t *) p;
+            (void)tracklist;
             p += SACD_LSN_SIZE;
         }
         else

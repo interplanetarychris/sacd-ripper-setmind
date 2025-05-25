@@ -366,7 +366,7 @@ int main(int argc, char* argv[])
 
         if(opts.version){
             fwprintf(stdout, L"sacd_extract version " SACD_RIPPER_VERSION_STRING "\n");
-            fwprintf(stdout, L"git repository: " SACD_RIPPER_REPO "\n", s_wchar);
+            fwprintf(stdout, L"git repository: " SACD_RIPPER_REPO "\n");
             nogo = 1;
         }
 
@@ -623,7 +623,9 @@ int main(int argc, char* argv[])
         }
 
 #ifndef _WIN32
-        freopen(0, "w", stdout);
+        if (freopen(0, "w", stdout) == NULL) {
+            LOG(lm_main, LOG_NOTICE, ("Warning: Failed to redirect stdout"));
+        }
 #endif
         if (fwide(stdout, -1) >= 0)
         {

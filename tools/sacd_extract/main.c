@@ -116,7 +116,7 @@ static int parse_options(int argc, char *argv[])
         "  -s, --output-dsf                : output as Sony DSF file\n"
         "  -z, --dsf-nopad                 : Do not zero pad DSF (cannot be used with -t)\n"
         "  -t, --select-track              : only output selected track(s) (ex. -t 1,5,13)\n"
-        "  -I, --output-iso                : output as RAW ISO\n"
+        "  -I, --output-iso                : output as RAW ISO (smart content-aware sizing)\n"
 #ifndef SECTOR_LIMIT
         "  -w, --concurrent                : Concurrent ISO+DSF/DSDIFF processing mode\n"
 #endif
@@ -299,14 +299,52 @@ static void handle_status_update_track_callback(char *filename, int current_trac
 static time_t started_processing;
 
 static void handle_status_update_progress_callback(uint32_t stats_total_sectors, uint32_t stats_total_sectors_processed,
-                                 uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed)
+                                 uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed,
+                                 uint32_t stats_iso_total_sectors, uint32_t stats_iso_sectors_processed,
+                                 uint32_t stats_dsf_total_sectors, uint32_t stats_dsf_sectors_processed,
+                                 int stats_dsf_tracks_completed, int stats_dsf_total_tracks,
+                                 char *current_track_name, int current_track_number, int is_iso_processing)
 {
-    safe_fwprintf(stdout, L"\rCompleted: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", (stats_current_file_sectors_processed*100/stats_current_file_total_sectors), 
-                                             ((float)((double) stats_current_file_sectors_processed * SACD_LSN_SIZE / 1048576.00)),
-                                             (stats_total_sectors_processed * 100 / stats_total_sectors),
-                                             ((float)((double) stats_current_file_total_sectors * SACD_LSN_SIZE / 1048576.00)),
-                                             (float)((double) stats_total_sectors_processed * SACD_LSN_SIZE / 1048576.00) / (float)(time(0) - started_processing)
-                                             );
+    float total_mb = (float)((double) stats_total_sectors_processed * SACD_LSN_SIZE / 1048576.00);
+    float speed = total_mb / (float)(time(0) - started_processing);
+    
+    // Calculate current track/file progress
+    int current_percentage = stats_current_file_total_sectors > 0 ? 
+        (stats_current_file_sectors_processed * 100 / stats_current_file_total_sectors) : 0;
+    int total_percentage = stats_total_sectors > 0 ? 
+        (stats_total_sectors_processed * 100 / stats_total_sectors) : 0;
+    
+    float current_mb = (float)((double) stats_current_file_sectors_processed * SACD_LSN_SIZE / 1048576.00);
+    
+    // Check if we're in concurrent mode (both ISO and DSF processing)
+    if (stats_iso_total_sectors > 0 && stats_dsf_total_sectors > 0)
+    {
+        // Concurrent processing - show DSF track vs ISO progress
+        if (is_iso_processing)
+        {
+            safe_fwprintf(stdout, L"\rISO: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", 
+                         current_percentage, current_mb, total_percentage, total_mb, speed);
+        }
+        else
+        {
+            safe_fwprintf(stdout, L"\rTrack %d: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", 
+                         current_track_number, current_percentage, current_mb, total_percentage, total_mb, speed);
+        }
+    }
+    else
+    {
+        // Single processing mode - show track progress vs total progress
+        if (is_iso_processing)
+        {
+            safe_fwprintf(stdout, L"\rISO: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", 
+                         current_percentage, current_mb, total_percentage, total_mb, speed);
+        }
+        else
+        {
+            safe_fwprintf(stdout, L"\rTrack %d: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", 
+                         current_track_number, current_percentage, current_mb, total_percentage, total_mb, speed);
+        }
+    }
 }
 
 /* Initialize global variables. */
@@ -446,6 +484,21 @@ int main(int argc, char* argv[])
                     {
 
                         uint32_t total_sectors = sacd_get_total_sectors(sacd_reader);
+                        uint32_t content_end_lsn = get_content_end_lsn(handle);
+                        
+                        // Always use smart content-aware extraction
+                        if (content_end_lsn > 0 && content_end_lsn < total_sectors)
+                        {
+                            uint32_t saved_sectors = total_sectors - content_end_lsn;
+                            uint32_t empty_percent = (saved_sectors * 100) / total_sectors;
+                            
+                            if (empty_percent > 10) // Only mention if significant empty space
+                            {
+                                float content_mb = (float)((double) content_end_lsn * SACD_LSN_SIZE / 1048576.00);
+                                safe_fwprintf(stdout, L"Extracting %.1fMB of content.\n", content_mb);
+                            }
+                            total_sectors = content_end_lsn;
+                        }
 #ifdef SECTOR_LIMIT
 #define FAT32_SECTOR_LIMIT 2090000
                         uint32_t sector_size = FAT32_SECTOR_LIMIT;

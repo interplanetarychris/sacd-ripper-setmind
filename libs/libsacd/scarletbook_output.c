@@ -101,6 +101,20 @@ struct scarletbook_output_s
     uint32_t            stats_total_sectors_processed;
     uint32_t            stats_current_file_total_sectors;
     uint32_t            stats_current_file_sectors_processed;
+    
+    // separate stats for concurrent processing
+    uint32_t            stats_iso_total_sectors;
+    uint32_t            stats_iso_sectors_processed;
+    uint32_t            stats_dsf_total_sectors;
+    uint32_t            stats_dsf_sectors_processed;
+    int                 stats_dsf_tracks_completed;
+    int                 stats_dsf_total_tracks;
+    
+    // current track information
+    char               *current_track_name;
+    int                 current_track_number;
+    int                 is_iso_processing;
+    
     stats_progress_callback_t stats_progress_callback;
     stats_track_callback_t stats_track_callback;
 
@@ -260,6 +274,21 @@ error:
     return -1;
 }
 
+static inline int close_output_file_with_stats(scarletbook_output_format_t * ft, scarletbook_output_t *output)
+{
+    int result;
+
+    result = ft->handler.stopwrite ? (*ft->handler.stopwrite)(ft) : 0;
+    
+    // Update DSF track completion count
+    if (output && (ft->handler.flags & (OUTPUT_FLAG_DSD | OUTPUT_FLAG_DST)))
+    {
+        output->stats_dsf_tracks_completed++;
+    }
+
+    return result;
+}
+
 static inline int close_output_file(scarletbook_output_format_t * ft)
 {
     int result;
@@ -289,11 +318,36 @@ static void scarletbook_output_init_stats(scarletbook_output_t *output)
     output->stats_current_file_sectors_processed = 0;
     output->stats_current_track = 0;
     output->stats_total_tracks = 0;
+    
+    // Initialize separate concurrent processing stats
+    output->stats_iso_total_sectors = 0;
+    output->stats_iso_sectors_processed = 0;
+    output->stats_dsf_total_sectors = 0;
+    output->stats_dsf_sectors_processed = 0;
+    output->stats_dsf_tracks_completed = 0;
+    output->stats_dsf_total_tracks = 0;
+    
+    // Initialize current track information
+    output->current_track_name = NULL;
+    output->current_track_number = 0;
+    output->is_iso_processing = 0;
+    
     list_for_each(node_ptr, &output->ripping_queue)
     {
         output_format_ptr = list_entry(node_ptr, scarletbook_output_format_t, siblings);
         output->stats_total_sectors += output_format_ptr->length_lsn;
         output->stats_total_tracks++;
+        
+        // Separate stats by processing type
+        if (output_format_ptr->handler.flags & OUTPUT_FLAG_RAW)
+        {
+            output->stats_iso_total_sectors += output_format_ptr->length_lsn;
+        }
+        else if (output_format_ptr->handler.flags & (OUTPUT_FLAG_DSD | OUTPUT_FLAG_DST))
+        {
+            output->stats_dsf_total_sectors += output_format_ptr->length_lsn;
+            output->stats_dsf_total_tracks++;
+        }
     }
 }
 
@@ -406,6 +460,13 @@ static void *processing_thread(void *arg)
         {
             output->stats_track_callback(ft->filename, output->stats_current_track, output->stats_total_tracks, ft->dsd_encoded_export && ft->dst_encoded_import);
         }
+        
+        // Update current track information
+        if (output->current_track_name)
+            free(output->current_track_name);
+        output->current_track_name = strdup(ft->filename);
+        output->current_track_number = output->stats_current_track;
+        output->is_iso_processing = (ft->handler.flags & OUTPUT_FLAG_RAW) ? 1 : 0;
 
         scarletbook_frame_init(handle);
 
@@ -448,6 +509,18 @@ static void *processing_thread(void *arg)
                 }
                 else if(ft->current_lsn == ft_sub->start_lsn){
                     output->stats_track_callback(ft_sub->filename, ft_sub->track + 1, handle->area[ft_sub->area].area_toc->track_count, ft->dsd_encoded_export && ft->dst_encoded_import);
+                    
+                    // Update current track information for sub-track
+                    if (output->current_track_name)
+                        free(output->current_track_name);
+                    output->current_track_name = strdup(ft_sub->filename);
+                    output->current_track_number = ft_sub->track + 1;
+                    output->is_iso_processing = 0; // This is DSF track processing
+                    
+                    // Reset current file stats for the new track
+                    output->stats_current_file_total_sectors = ft_sub->length_lsn;
+                    output->stats_current_file_sectors_processed = 0;
+                    
                     // First track starting immediately
                     list_del(node_ptr_sub);
                     end_lsn = ft_sub->start_lsn + ft_sub->length_lsn - 1;
@@ -503,6 +576,35 @@ static void *processing_thread(void *arg)
                     buf = malloc(sizeof(uint8_t) * block_size * SACD_LSN_SIZE);
                     block_size = (uint32_t) sacd_read_block_raw(ft->sb_handle->sacd, ft->current_lsn, block_size, buf);
 
+                    // Handle case where no blocks were read
+                    if (block_size == 0)
+                    {
+                        free(buf);
+                        
+                        // Check if we've reached the expected end of the current processing area
+                        if (ft->current_lsn >= end_lsn)
+                        {
+                            // Normal completion of current processing segment
+                            break;
+                        }
+                        else
+                        {
+                            // Unexpected read failure - log error with context
+                            float completion_percentage = (float)(ft->current_lsn - ft->start_lsn) / (float)(ft->start_lsn + ft->length_lsn - ft->start_lsn) * 100.0f;
+                            
+                            if (ft->handler.flags & OUTPUT_FLAG_RAW)
+                            {
+                                LOG(lm_main, LOG_NOTICE, ("ISO extraction: Content area completed at %.1f%% (LSN %d/%d). Continuing with remaining disc data.", 
+                                    completion_percentage, ft->current_lsn, ft->start_lsn + ft->length_lsn));
+                            }
+                            else
+                            {
+                                LOG(lm_main, LOG_NOTICE, ("Area %d processing completed at %.1f%% (LSN %d/%d). Normal end of content area.",
+                                    ft->area, completion_percentage, ft->current_lsn, ft->start_lsn + ft->length_lsn));
+                            }
+                            break;
+                        }
+                    }
                     // Wait for the eixting frame processing thread to finish
                     if(processing_thread_run){
                         processing_thread_run  = 0;
@@ -517,7 +619,29 @@ static void *processing_thread(void *arg)
 
                     ft->current_lsn += block_size;
                     output->stats_total_sectors_processed += block_size;
-                    output->stats_current_file_sectors_processed += block_size;
+                    
+                    // Update current file progress - distinguish between main file and sub-tracks
+                    if (ft_sub != NULL)
+                    {
+                        // We're processing a sub-track, calculate progress within that track
+                        uint32_t track_progress = ft->current_lsn - ft_sub->start_lsn;
+                        output->stats_current_file_sectors_processed = track_progress;
+                    }
+                    else
+                    {
+                        // We're processing the main file (ISO)
+                        output->stats_current_file_sectors_processed += block_size;
+                    }
+                    
+                    // Update separate concurrent processing stats
+                    if (ft->handler.flags & OUTPUT_FLAG_RAW)
+                    {
+                        output->stats_iso_sectors_processed += block_size;
+                    }
+                    else if (ft->handler.flags & (OUTPUT_FLAG_DSD | OUTPUT_FLAG_DST))
+                    {
+                        output->stats_dsf_sectors_processed += block_size;
+                    }
 
                     // the ATAPI call which returns the flag if the disc is encrypted or not is unknown at this point. 
                     // user reports tell me that the only non-encrypted discs out there are DSD 3 14/16 discs. 
@@ -581,7 +705,11 @@ static void *processing_thread(void *arg)
                     if (output->stats_progress_callback)
                     {
                         output->stats_progress_callback(output->stats_total_sectors, output->stats_total_sectors_processed, 
-                            output->stats_current_file_total_sectors, output->stats_current_file_sectors_processed);
+                            output->stats_current_file_total_sectors, output->stats_current_file_sectors_processed,
+                            output->stats_iso_total_sectors, output->stats_iso_sectors_processed,
+                            output->stats_dsf_total_sectors, output->stats_dsf_sectors_processed,
+                            output->stats_dsf_tracks_completed, output->stats_dsf_total_tracks,
+                            output->current_track_name, output->current_track_number, output->is_iso_processing);
                     }
                 }
                 else
@@ -600,7 +728,7 @@ static void *processing_thread(void *arg)
                         {
                             dst_decoder_destroy(ft_sub->dst_decoder);
                         }
-                        close_output_file(ft_sub);
+                        close_output_file_with_stats(ft_sub, output);
                         ft_sub = NULL;
                     }
                     if(!list_empty(&ft->sub_queue)){
@@ -614,6 +742,18 @@ static void *processing_thread(void *arg)
                         else if (ft->current_lsn >= ft_sub->start_lsn){
                             // Next sub queue item starting
                             output->stats_track_callback(ft_sub->filename, ft_sub->track + 1, handle->area[ft_sub->area].area_toc->track_count, ft->dsd_encoded_export && ft->dst_encoded_import);
+                            
+                            // Update current track information for next sub-track
+                            if (output->current_track_name)
+                                free(output->current_track_name);
+                            output->current_track_name = strdup(ft_sub->filename);
+                            output->current_track_number = ft_sub->track + 1;
+                            output->is_iso_processing = 0; // This is DSF track processing
+                            
+                            // Reset current file stats for the new track
+                            output->stats_current_file_total_sectors = ft_sub->length_lsn;
+                            output->stats_current_file_sectors_processed = 0;
+                            
                             if(create_output_file(ft_sub))
                                 break;
                             list_del(node_ptr_sub);
@@ -795,6 +935,11 @@ int scarletbook_output_destroy(scarletbook_output_t *output)
     // If decoding is aborted (eg. ctrl+C), then free() buffers after the decoder has been destroyed,
     // to ensure that buffers aren't still in use when they're free()d.
     free(output->read_buffer);
+    
+    // Clean up current track name
+    if (output->current_track_name)
+        free(output->current_track_name);
+    
     free(output);
 
     return ret;

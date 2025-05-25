@@ -56,6 +56,34 @@ static inline area_toc_t* get_multi_channel(scarletbook_handle_t *handle)
     return(handle->mulch_area_idx == -1 ? 0 : handle->area[handle->mulch_area_idx].area_toc);
 }
 
+static inline uint32_t get_content_end_lsn(scarletbook_handle_t *handle)
+{
+    uint32_t max_end_lsn = 0;
+    
+    // Find the highest track_end from all areas with content
+    if (has_two_channel(handle))
+    {
+        area_toc_t *toc = get_two_channel(handle);
+        if (toc && toc->track_end > max_end_lsn)
+            max_end_lsn = toc->track_end;
+    }
+    
+    if (has_multi_channel(handle))
+    {
+        area_toc_t *toc = get_multi_channel(handle);
+        if (toc && toc->track_end > max_end_lsn)
+            max_end_lsn = toc->track_end;
+    }
+    
+    return max_end_lsn;
+}
+
+static inline int is_mostly_empty_disc(scarletbook_handle_t *handle, uint32_t total_sectors)
+{
+    uint32_t content_end = get_content_end_lsn(handle);
+    return (content_end > 0 && content_end < total_sectors / 2);
+}
+
 char *get_speaker_config_string(area_toc_t *);
 
 char *get_frame_format_string(area_toc_t *);

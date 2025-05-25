@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/chris/code/sacd-ripper-setmind/tools/sacd_extract/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

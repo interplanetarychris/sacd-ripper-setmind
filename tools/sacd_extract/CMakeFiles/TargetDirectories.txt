@@ -1,0 +1,3 @@
+/Users/chris/code/sacd-ripper-setmind/tools/sacd_extract/CMakeFiles/sacd_extract.dir
+/Users/chris/code/sacd-ripper-setmind/tools/sacd_extract/CMakeFiles/edit_cache.dir
+/Users/chris/code/sacd-ripper-setmind/tools/sacd_extract/CMakeFiles/rebuild_cache.dir

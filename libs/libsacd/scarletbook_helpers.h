@@ -61,6 +61,7 @@ static inline uint32_t get_content_end_lsn(scarletbook_handle_t *handle)
     uint32_t max_end_lsn = 0;
     
     // Find the highest track_end from all areas with content
+    // Areas are typically laid out sequentially on the disc
     if (has_two_channel(handle))
     {
         area_toc_t *toc = get_two_channel(handle);

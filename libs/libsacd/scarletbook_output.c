@@ -625,6 +625,9 @@ static void *processing_thread(void *arg)
                     {
                         // We're processing a sub-track, calculate progress within that track
                         uint32_t track_progress = ft->current_lsn - ft_sub->start_lsn;
+                        // Cap progress at track length to prevent >100%
+                        if (track_progress > ft_sub->length_lsn)
+                            track_progress = ft_sub->length_lsn;
                         output->stats_current_file_sectors_processed = track_progress;
                     }
                     else

@@ -484,20 +484,30 @@ int main(int argc, char* argv[])
                     {
 
                         uint32_t total_sectors = sacd_get_total_sectors(sacd_reader);
-                        uint32_t content_end_lsn = get_content_end_lsn(handle);
                         
-                        // Always use smart content-aware extraction
-                        if (content_end_lsn > 0 && content_end_lsn < total_sectors)
+                        // Only apply content-aware extraction when extracting specific areas
+                        // For ISO-only extraction (no areas selected), extract full disc
+                        if (n_areas > 0)
                         {
-                            uint32_t saved_sectors = total_sectors - content_end_lsn;
-                            uint32_t empty_percent = (saved_sectors * 100) / total_sectors;
-                            
-                            if (empty_percent > 10) // Only mention if significant empty space
+                            uint32_t content_end_lsn = get_content_end_lsn(handle);
+                            if (content_end_lsn > 0 && content_end_lsn < total_sectors)
                             {
-                                float content_mb = (float)((double) content_end_lsn * SACD_LSN_SIZE / 1048576.00);
-                                safe_fwprintf(stdout, L"Extracting %.1fMB of content.\n", content_mb);
+                                uint32_t saved_sectors = total_sectors - content_end_lsn;
+                                uint32_t empty_percent = (saved_sectors * 100) / total_sectors;
+                                
+                                if (empty_percent > 10) // Only mention if significant empty space
+                                {
+                                    float content_mb = (float)((double) content_end_lsn * SACD_LSN_SIZE / 1048576.00);
+                                    safe_fwprintf(stdout, L"Extracting %.1fMB of content.\n", content_mb);
+                                }
+                                total_sectors = content_end_lsn;
                             }
-                            total_sectors = content_end_lsn;
+                        }
+                        else
+                        {
+                            // ISO-only extraction - extract full disc
+                            float total_mb = (float)((double) total_sectors * SACD_LSN_SIZE / 1048576.00);
+                            safe_fwprintf(stdout, L"Extracting %.1fMB (full disc).\n", total_mb);
                         }
 #ifdef SECTOR_LIMIT
 #define FAT32_SECTOR_LIMIT 2090000

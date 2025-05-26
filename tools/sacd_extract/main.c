@@ -50,6 +50,7 @@
 #include <scarletbook_read.h>
 #include <scarletbook_output.h>
 #include <scarletbook_print.h>
+#include <scarletbook_verify.h>
 #include <scarletbook_helpers.h>
 #include <scarletbook_id3.h>
 #include <cuesheet.h>
@@ -77,6 +78,7 @@ static struct opts_s
     int            convert_dst;
     int            export_cue_sheet;
     int            print;
+    int            verify;
     char          *input_device; /* Access method driver should use for control */
     char           output_file[512];
     char          *output_dir;
@@ -127,6 +129,7 @@ static int parse_options(int argc, char *argv[])
         "  -o, --output-dir[=DIR]          : Output directory (ISO output dir for concurrent processing mode)\n"
         "  -y, --output-dir-conc[=DIR]     : DSF/DSDIFF Output directory for concurrent processing mode\n"
         "  -P, --print                     : display disc and track information\n" 
+        "  -V, --verify                    : verify ScarletBook integrity (quick structural checks)\n"
         "  -v, --version                   : Display version\n"
         "\n"
         "Help options:\n"
@@ -143,9 +146,9 @@ static int parse_options(int argc, char *argv[])
         "        [-c|--convert-dst] [-C|--export-cue] [-i|--input FILE] [-o|--output-dir DIR] [-y|--output-dir-conc DIR] [-P|--print]\n"
         "        [-?|--help] [--usage]\n";
 #ifdef SECTOR_LIMIT
-    static const char options_string[] = "2mepszIcCvi:o:y:t:P?";
+    static const char options_string[] = "2mepszIcCvi:o:y:t:PV?";
 #else
-    static const char options_string[] = "2mepszIwcCvi:o:y:t:P?";
+    static const char options_string[] = "2mepszIwcCvi:o:y:t:PV?";
 #endif
     static const struct option options_table[] = {
         {"2ch-tracks", no_argument, NULL, '2' },
@@ -165,6 +168,7 @@ static int parse_options(int argc, char *argv[])
         {"output-dir", required_argument, NULL, 'o' },
         {"output-dir-conc", required_argument, NULL, 'y' },
         {"print", no_argument, NULL, 'P' },
+        {"verify", no_argument, NULL, 'V' },
 
         {"help", no_argument, NULL, '?' },
         {"usage", no_argument, NULL, 'u' },
@@ -232,6 +236,7 @@ static int parse_options(int argc, char *argv[])
         case 'o': opts.output_dir = strdup(optarg); break;
         case 'y': opts.output_dir_conc = strdup(optarg); break;
         case 'P': opts.print = 1; break;
+        case 'V': opts.verify = 1; break;
         case 'v': opts.version = 1; break;
         case '?':
             fprintf(stdout, help_text, program_name);
@@ -367,6 +372,7 @@ static void init(void)
     opts.convert_dst        = 0;
     opts.export_cue_sheet   = 0;
     opts.print              = 0;
+    opts.verify             = 0;
     opts.input_device       = "/dev/cdrom";
     opts.dsf_nopad              = 0;
 
@@ -523,6 +529,22 @@ int main(int argc, char* argv[])
                 if (opts.print)
                 {
                     scarletbook_print(handle);
+                }
+
+                if (opts.verify)
+                {
+                    int verify_result = scarletbook_verify(handle);
+                    if (verify_result < 0)
+                    {
+                        fprintf(stderr, "Verification failed due to invalid input\n");
+                        return 2; // Invalid input error
+                    }
+                    else if (verify_result > 0)
+                    {
+                        fprintf(stderr, "ScarletBook verification failed with %d error(s)\n", verify_result);
+                        return 1; // Verification failed
+                    }
+                    // If verify_result == 0, verification passed, continue normally
                 }
 
                 if (opts.output_dsf || opts.output_iso || opts.output_dsdiff || opts.output_dsdiff_em || opts.export_cue_sheet)

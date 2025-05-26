@@ -36,6 +36,8 @@ This fork adds the following additional features to the original sacd_extract.
 
 8. Stereo and multi-channel extraction in one shot: No longer need to run sacd_extract twice to extract stereo and multi-channel tracks.  In other words, the -2 and -m options can be used simultaneously for DSF/DSDIFF generation.
 
+9. ScarletBook verification (-V, --verify): Quick integrity verification with structural checks and sector spot-testing.  Works with any SACD source (device, server, or ISO file) and returns proper exit codes for batch processing (0=pass, 1=fail, 2=error).
+
 Development of this software is primarily done on Linux.  Functionality on Windows has been checked.  Windows binary needs to be compiled with Mingw-w64.  Visual Studio is no longer supported.
 
 Usage
@@ -59,6 +61,7 @@ The following options are available for the sacd_extract commandline tool: ::
   -o, --output-dir[=DIR]          : Output directory (ISO output dir for concurrent processing mode)
   -y, --output-dir-conc[=DIR]     : DSF/DSDIFF Output directory for concurrent processing mode
   -P, --print                     : display disc and track information
+  -V, --verify                    : verify ScarletBook integrity (quick structural checks)
 
 
 Usage examples
@@ -83,6 +86,25 @@ Concurrently extract an ISO file to /home/user/blah/<album_name>.iso and all ste
 Concurrently extract an ISO file to /home/user/blah/<album_name>.iso and all stereo and multi-channel tracks in DSF to /tmp/blah/<album_name> from a server.::
 
     $ sacd_extract -I -s -w -z -2 -m -i192.168.1.10:2002 -o /home/user/blah -y /tmp/blah
+
+Verify the integrity of a physical SACD disc (uses /dev/cdrom by default)::
+
+    $ sacd_extract -V
+
+Verify the integrity of an ISO file::
+
+    $ sacd_extract -V -i"Foo_Bar_RIP.ISO"
+
+Verify all ISO files in a directory and move failed ones to quarantine::
+
+    $ for iso in *.iso; do
+        if ! sacd_extract -V -i "$iso" >/dev/null 2>&1; then
+            echo "✗ $iso - verification failed"
+            mv "$iso" quarantine/
+        else
+            echo "✓ $iso - verification passed"
+        fi
+      done
 
 
 Compilation

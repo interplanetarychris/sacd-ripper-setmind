@@ -73,15 +73,14 @@
 
 #define MAX_PROCESSING_BLOCK_SIZE      512
 
-enum
+enum frame_format_t
 {
       FRAME_FORMAT_DST         = 0
     , FRAME_FORMAT_DSD_3_IN_14 = 2
     , FRAME_FORMAT_DSD_3_IN_16 = 3
-} 
-frame_format_t;
+};
 
-enum
+enum character_set_t
 {
       CHAR_SET_UNKNOWN       = 0
     , CHAR_SET_ISO646        = 1    // ISO 646 (IRV), no escape sequences allowed
@@ -91,15 +90,14 @@ enum
     , CHAR_SET_GB2312        = 5    // Chinese GB 2312-80
     , CHAR_SET_BIG5          = 6    // Big5
     , CHAR_SET_ISO8859_1_ESC = 7    // ISO 8859-1, single byte set escape sequences allowed
-} 
-character_set_t;
+};
 
 // string representation for character sets
 extern const char *character_set[];
 
 extern const char *album_genre[];
 
-enum
+enum genre_t
 {
       GENRE_NOT_USED               = 0       // 12
     , GENRE_NOT_DEFINED            = 1       // 12
@@ -131,20 +129,18 @@ enum
     , GENRE_SPOKEN_WORD            = 27      // 101
     , GENRE_WORLD_MUSIC            = 28      // 12
     , GENRE_BLUES                  = 29      // 0
-} 
-genre_t;
+};
 
-enum
+enum category_t
 {
       CATEGORY_NOT_USED = 0
     , CATEGORY_GENERAL  = 1
     , CATEGORY_JAPANESE = 2
-}                 
-category_t;
+};
 
 extern const char *album_category[];
 
-enum
+enum track_type_t
 {
       TRACK_TYPE_TITLE                  = 0x01
     , TRACK_TYPE_PERFORMER              = 0x02
@@ -161,8 +157,7 @@ enum
     , TRACK_TYPE_ARRANGER_PHONETIC      = 0x85
     , TRACK_TYPE_MESSAGE_PHONETIC       = 0x86
     , TRACK_TYPE_EXTRA_MESSAGE_PHONETIC = 0x87
-} 
-track_type_t;
+};
 
 #if PRAGMA_PACK
 #pragma pack(1)
@@ -469,13 +464,12 @@ typedef struct
 } 
 ATTRIBUTE_PACKED area_tracklist_t;
 
-enum
+enum audio_packet_data_type_t
 {
       DATA_TYPE_AUDIO           = 2
     , DATA_TYPE_SUPPLEMENTARY   = 3
     , DATA_TYPE_PADDING         = 7
-} 
-audio_packet_data_type_t;
+};
 
 // It's no use to make a little & big endian struct. On little 
 // endian systems this needs to be filled manually anyway.

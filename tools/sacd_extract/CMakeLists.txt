@@ -1,6 +1,6 @@
 # CMake build file for SACD Extract
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.5)
 
 # Mingw-w64 support
 OPTION(MINGW64 "Mingw-w64" NO)
@@ -61,6 +61,12 @@ include_directories("../../libs/libcommon")
 include_directories("../../libs/libdstdec")
 include_directories("../../libs/libid3")
 include_directories("../../libs/libsacd")
+
+# Find LibXML2 (optional)
+find_package(LibXml2)
+if(LIBXML2_FOUND)
+    include_directories(${LIBXML2_INCLUDE_DIR})
+endif()
  
 STRING(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(NOT CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
@@ -69,10 +75,14 @@ if(NOT CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
         -pipe
         -Wall -Wextra -Wcast-align -Wpointer-arith -O3
         -Wno-unused-parameter)
+    # Handle protobuf alignment issues on Apple Silicon  
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64" AND APPLE)
+        add_definitions(-Wno-address-of-packed-member)
+    endif()
   endif ()
-  if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm*")
-    add_definitions(
-        -msse2)
+  # Enable SSE2 only for x86/x64 architectures
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86|x86_64|amd64|AMD64)$")
+    add_definitions(-msse2)
   endif ()
 endif ()
 
@@ -112,3 +122,9 @@ add_executable(sacd_extract
     ${libid3_headers} ${libid3_sources}
     ${libsacd_headers} ${libsacd_sources}
     )
+
+# Link LibXML2 if found
+if(LIBXML2_FOUND)
+    target_link_libraries(sacd_extract ${LIBXML2_LIBRARIES})
+endif()
+

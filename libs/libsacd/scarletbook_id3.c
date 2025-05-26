@@ -114,7 +114,7 @@ int scarletbook_id3_tag_render(scarletbook_handle_t *handle, uint8_t *buffer, in
         id3_set_text(frame, album_artist);
         free(album_artist);
     }
-    if (&handle->area[area].area_isrc_genre->isrc[track])
+    if (handle->area[area].area_isrc_genre->isrc[track].country_code[0])
     {
         char isrc[12];
         char *isrc_conv;

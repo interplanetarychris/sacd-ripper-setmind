@@ -230,15 +230,37 @@ sacd_reader_t *sacd_open(const char *ppath)
 
             if (cdir >= 0)
             {
-                chdir(path_copy);
-                new_path = malloc(PATH_MAX + 1);
-                if (!new_path)
-                {
+                if (chdir(path_copy) != 0) {
+                    close(cdir);
+                    free(path_copy);
                     free(path);
                     return NULL;
                 }
-                getcwd(new_path, PATH_MAX);
-                fchdir(cdir);
+                new_path = malloc(PATH_MAX + 1);
+                if (!new_path)
+                {
+                    if (fchdir(cdir) != 0) {
+                        /* Already in error state, just continue cleanup */
+                    }
+                    close(cdir);
+                    free(path);
+                    return NULL;
+                }
+                if (getcwd(new_path, PATH_MAX) == NULL) {
+                    if (fchdir(cdir) != 0) {
+                        /* Already in error state, just continue cleanup */
+                    }
+                    close(cdir);
+                    free(new_path);
+                    free(path);
+                    return NULL;
+                }
+                if (fchdir(cdir) != 0) {
+                    close(cdir);
+                    free(new_path);
+                    free(path);
+                    return NULL;
+                }
                 close(cdir);
                 free(path_copy);
                 path_copy = new_path;

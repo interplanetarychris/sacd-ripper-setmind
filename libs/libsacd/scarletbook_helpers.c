@@ -35,7 +35,7 @@ char *get_album_dir(scarletbook_handle_t *handle)
 {
     char disc_artist[MAX_DISC_ARTIST_LEN + 1];
     char disc_album_title[MAX_ALBUM_TITLE_LEN + 1];
-    char disc_album_year[5];
+    char disc_album_year[6];
     char *albumdir;
     master_text_t *master_text = &handle->master_text;
     char *artist = 0;
@@ -102,7 +102,7 @@ char *get_music_filename(scarletbook_handle_t *handle, int area, int track, cons
     char track_artist[MAX_TRACK_ARTIST_LEN + 1];
     char track_title[MAX_TRACK_TITLE_LEN + 1];
     char disc_album_title[MAX_ALBUM_TITLE_LEN + 1];
-    char disc_album_year[5];
+    char disc_album_year[6];
     master_text_t *master_text = &handle->master_text;
     char *album_title = 0; 
     

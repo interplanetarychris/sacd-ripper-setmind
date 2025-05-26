@@ -110,7 +110,7 @@ static void scarletbook_print_master_toc(scarletbook_handle_t *handle)
     fwprintf(stdout, L"\tCreation date: %4i-%02i-%02i\n"
             , mtoc->disc_date_year, mtoc->disc_date_month, mtoc->disc_date_day);
 
-    if (mtoc->disc_catalog_number)
+    if (mtoc->disc_catalog_number[0])
     {
         strncpy(tmp_str, mtoc->disc_catalog_number, 16);
         tmp_str[16] = '\0';
@@ -129,7 +129,7 @@ static void scarletbook_print_master_toc(scarletbook_handle_t *handle)
     scarletbook_print_disc_text(handle);
 
     fwprintf(stdout, L"\nAlbum Information:\n\n");
-    if (mtoc->disc_catalog_number)
+    if (mtoc->disc_catalog_number[0])
     {
         strncpy(tmp_str, mtoc->album_catalog_number, 16);
         tmp_str[16] = '\0';
@@ -196,6 +196,9 @@ static void scarletbook_print_area_toc(scarletbook_handle_t *handle, int area_id
     area_tracklist_offset_t *area_tracklist_offset;
     area_tracklist_t        *area_tracklist_time;
     scarletbook_area_t      *area = &handle->area[area_idx];
+    
+    (void)area_tracklist_offset;
+    (void)area_tracklist_time;
     area_toc_t              *area_toc = area->area_toc;
     area_isrc_genre   = area->area_isrc_genre;
     area_tracklist_offset = area->area_tracklist_offset;

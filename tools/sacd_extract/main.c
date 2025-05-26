@@ -576,11 +576,19 @@ int main(int argc, char* argv[])
                         char *albumdir_loc;
                         albumdir_loc = (char *)malloc(strlen(albumdir)+16);
 
+                        // Check if disc has both stereo and multi-channel content
+                        int has_alternate_content = has_two_channel(handle) && has_multi_channel(handle);
+
                         for(j = 0; j < n_areas; j ++){
                             wchar_t *wide_filename;
                             strcpy(albumdir_loc, albumdir);
                             if(n_areas > 1){
+                                // Processing both areas - keep current behavior
                                 strcat(albumdir_loc, j ? " [multi]" : " [stereo]");
+                            }
+                            else if(has_alternate_content){
+                                // Processing single area but alternate content exists - hint user
+                                strcat(albumdir_loc, (area_idx[j] == handle->twoch_area_idx) ? " [stereo]" : " [multi]");
                             }
 
                             file_path = get_unique_path(opts.output_dir, albumdir_loc, "cue");
@@ -681,13 +689,22 @@ int main(int argc, char* argv[])
 
                                 char *albumdir_loc;
                                 albumdir_loc = (char *)malloc(strlen(albumdir)+16);
+                                
+                                // Check if disc has both stereo and multi-channel content
+                                int has_alternate_content = has_two_channel(handle) && has_multi_channel(handle);
+                                
                                 // fill the sub queue with items to rip
                                 for (j = 0; j < n_areas; j ++){
                                     // create the output folder
                                     // If both stereo and multi-ch tracks are getting processed, create separate directories
                                     strcpy(albumdir_loc, albumdir);
                                     if(n_areas > 1){
+                                        // Processing both areas - keep current behavior
                                         strcat(albumdir_loc, j ? " [multi]" : " [stereo]");
+                                    }
+                                    else if(has_alternate_content){
+                                        // Processing single area but alternate content exists - hint user
+                                        strcat(albumdir_loc, (area_idx[j] == handle->twoch_area_idx) ? " [stereo]" : " [multi]");
                                     }
 
                                     get_unique_dir(opts.output_dir_conc, &albumdir_loc);
@@ -738,10 +755,18 @@ int main(int argc, char* argv[])
                         char *albumdir_loc;
                         albumdir_loc = (char *)malloc(strlen(albumdir)+16);
 
+                        // Check if disc has both stereo and multi-channel content
+                        int has_alternate_content = has_two_channel(handle) && has_multi_channel(handle);
+
                         for(j = 0; j < n_areas; j ++){
                             strcpy(albumdir_loc, albumdir);
                             if(n_areas > 1){
+                                // Processing both areas - keep current behavior
                                 strcat(albumdir_loc, j ? " [multi]" : " [stereo]");
+                            }
+                            else if(has_alternate_content){
+                                // Processing single area but alternate content exists - hint user
+                                strcat(albumdir_loc, (area_idx[j] == handle->twoch_area_idx) ? " [stereo]" : " [multi]");
                             }
 
                             file_path = get_unique_path(opts.output_dir, albumdir_loc, "dff");
@@ -793,12 +818,20 @@ int main(int argc, char* argv[])
                         char *albumdir_loc;
                         albumdir_loc = (char *)malloc(strlen(albumdir)+16);
 
+                        // Check if disc has both stereo and multi-channel content
+                        int has_alternate_content = has_two_channel(handle) && has_multi_channel(handle);
+
                         for(j = 0; j < n_areas; j ++){
                             // create the output folder
                             // If both stereo and multi-ch tracks are getting processed, create separate directories
                             strcpy(albumdir_loc, albumdir);
                             if(n_areas > 1){
+                                // Processing both areas - keep current behavior
                                 strcat(albumdir_loc, j ? " [multi]" : " [stereo]");
+                            }
+                            else if(has_alternate_content){
+                                // Processing single area but alternate content exists - hint user
+                                strcat(albumdir_loc, (area_idx[j] == handle->twoch_area_idx) ? " [stereo]" : " [multi]");
                             }
 
                             get_unique_dir(opts.output_dir, &albumdir_loc);

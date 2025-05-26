@@ -93,7 +93,11 @@ struct scarletbook_output_format_t
 }; 
 
 typedef void (*stats_progress_callback_t)(uint32_t stats_total_sectors, uint32_t stats_total_sectors_processed,
-                                          uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed);
+                                          uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed,
+                                          uint32_t stats_iso_total_sectors, uint32_t stats_iso_sectors_processed,
+                                          uint32_t stats_dsf_total_sectors, uint32_t stats_dsf_sectors_processed,
+                                          int stats_dsf_tracks_completed, int stats_dsf_total_tracks,
+                                          char *current_track_name, int current_track_number, int is_iso_processing);
 
 typedef void (*stats_track_callback_t)(char *filename, int current_track, int total_tracks, int dst_decomp);
 

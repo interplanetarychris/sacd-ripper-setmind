@@ -299,14 +299,56 @@ static void handle_status_update_track_callback(char *filename, int current_trac
 static time_t started_processing;
 
 static void handle_status_update_progress_callback(uint32_t stats_total_sectors, uint32_t stats_total_sectors_processed,
-                                 uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed)
+                                 uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed,
+                                 uint32_t stats_iso_total_sectors, uint32_t stats_iso_sectors_processed,
+                                 uint32_t stats_dsf_total_sectors, uint32_t stats_dsf_sectors_processed,
+                                 int stats_dsf_tracks_completed, int stats_dsf_total_tracks,
+                                 char *current_track_name, int current_track_number, int is_iso_processing)
 {
-    safe_fwprintf(stdout, L"\rCompleted: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec", (stats_current_file_sectors_processed*100/stats_current_file_total_sectors), 
-                                             ((float)((double) stats_current_file_sectors_processed * SACD_LSN_SIZE / 1048576.00)),
-                                             (stats_total_sectors_processed * 100 / stats_total_sectors),
-                                             ((float)((double) stats_current_file_total_sectors * SACD_LSN_SIZE / 1048576.00)),
-                                             (float)((double) stats_total_sectors_processed * SACD_LSN_SIZE / 1048576.00) / (float)(time(0) - started_processing)
-                                             );
+    float total_mb = (float)((double) stats_total_sectors_processed * SACD_LSN_SIZE / 1048576.00);
+    float speed = total_mb / (float)(time(0) - started_processing);
+    
+    // Calculate current track/file progress
+    int current_percentage = stats_current_file_total_sectors > 0 ? 
+        (stats_current_file_sectors_processed * 100 / stats_current_file_total_sectors) : 0;
+    int total_percentage = stats_total_sectors > 0 ? 
+        (stats_total_sectors_processed * 100 / stats_total_sectors) : 0;
+    
+    float current_mb = (float)((double) stats_current_file_sectors_processed * SACD_LSN_SIZE / 1048576.00);
+    
+    // Show appropriate progress based on processing type and completion status
+    if (is_iso_processing)
+    {
+        safe_fwprintf(stdout, L"\rISO: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec                    ",  // Clear line fragments
+                     current_percentage, current_mb, total_percentage, total_mb, speed);
+    }
+    else
+    {
+        // Get the actual display track number first
+        int display_track = (current_track_number > 0) ? current_track_number : 1;
+        
+        // Check if DSF tracks are completed or if we're on the final track and it's at/near completion
+        int dsf_completed = (stats_dsf_tracks_completed >= stats_dsf_total_tracks && stats_dsf_total_tracks > 0);
+        int final_track_near_complete = (display_track == stats_dsf_total_tracks && 
+                                        current_percentage >= 100 && stats_dsf_total_tracks > 0);
+        
+        if (dsf_completed || final_track_near_complete)
+        {
+            // DSF tracks completed or final track finished, show ISO-only progress
+            int iso_percentage = stats_iso_total_sectors > 0 ? 
+                (stats_iso_sectors_processed * 100 / stats_iso_total_sectors) : 0;
+            float iso_mb = (float)((double) stats_iso_sectors_processed * SACD_LSN_SIZE / 1048576.00);
+            
+            safe_fwprintf(stdout, L"\rISO: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec                    ",  // Clear line fragments
+                         iso_percentage, iso_mb, total_percentage, total_mb, speed);
+        }
+        else
+        {
+            // Normal track processing
+            safe_fwprintf(stdout, L"\rTrack %d: %d%% (%.1fMB), Total: %d%% (%.1fMB) at %.2fMB/sec                ",  // Clear line fragments
+                         display_track, current_percentage, current_mb, total_percentage, total_mb, speed);
+        }
+    }
 }
 
 /* Initialize global variables. */
@@ -339,6 +381,82 @@ static void init(void)
 
     init_logging();
     g_fwprintf_lock = new_lock(0);
+}
+
+static uint32_t get_selected_tracks_sectors(scarletbook_handle_t *handle, int area_idx_val)
+{
+    uint32_t total_sectors = 0;
+    area_tracklist_offset_t *tracklist = handle->area[area_idx_val].area_tracklist_offset;
+    area_toc_t *toc = handle->area[area_idx_val].area_toc;
+    
+    if (!tracklist || !toc)
+        return 0;
+    
+    for (int i = 0; i < toc->track_count; i++)
+    {
+        if (opts.select_tracks && opts.selected_tracks[i] == 0)
+            continue;
+            
+        uint32_t track_sectors;
+        if (i < toc->track_count - 1)
+        {
+            track_sectors = tracklist->track_start_lsn[i + 1] - tracklist->track_start_lsn[i];
+        }
+        else
+        {
+            track_sectors = toc->track_end - tracklist->track_start_lsn[i];
+        }
+        total_sectors += track_sectors;
+    }
+    
+    return total_sectors;
+}
+
+static void format_track_list_message(char *buffer, size_t buffer_size)
+{
+    buffer[0] = '\0';
+    int first = 1;
+    int count = 0;
+    
+    for (int i = 0; i < 256; i++)
+    {
+        if (opts.selected_tracks[i])
+        {
+            count++;
+            if (first)
+            {
+                snprintf(buffer + strlen(buffer), buffer_size - strlen(buffer), "%d", i + 1);
+                first = 0;
+            }
+            else if (count <= 3)
+            {
+                snprintf(buffer + strlen(buffer), buffer_size - strlen(buffer), ",%d", i + 1);
+            }
+            else if (count == 4)
+            {
+                snprintf(buffer + strlen(buffer), buffer_size - strlen(buffer), "...");
+                break;
+            }
+        }
+    }
+    
+    if (count == 1)
+    {
+        for (int i = 0; i < 256; i++)
+        {
+            if (opts.selected_tracks[i])
+            {
+                snprintf(buffer, buffer_size, "track %d", i + 1);
+                break;
+            }
+        }
+    }
+    else if (count > 1)
+    {
+        char temp[256];
+        strcpy(temp, buffer);
+        snprintf(buffer, buffer_size, "tracks %s", temp);
+    }
 }
 
 int main(int argc, char* argv[]) 
@@ -411,6 +529,17 @@ int main(int argc, char* argv[])
                 {
                     output = scarletbook_output_create(handle, handle_status_update_track_callback, handle_status_update_progress_callback, safe_fwprintf);
 
+                    // Check for sector count discrepancies against Track_Area_End_Address
+                    // Per Super Audio CD System Description (Scarlet Book) Part 2 Section 3.2.1.2.14
+                    uint32_t total_sectors = sacd_get_total_sectors(sacd_reader);
+                    uint32_t content_end = get_content_end_lsn(handle);
+                    if (content_end > 0 && content_end > total_sectors) {
+                        // Server reports smaller size than Track_Area_End_Address requires
+                        safe_fwprintf(stdout, L"Warning: source reporting incorrect sector count (%.1fMB vs %.1fMB Track_Area_End_Address)\n", 
+                                     (float)((double) total_sectors * SACD_LSN_SIZE / 1048576.00),
+                                     (float)((double) content_end * SACD_LSN_SIZE / 1048576.00));
+                    }
+
                     // select the channel area
                     if(has_two_channel(handle) && opts.two_channel){
                         area_idx[n_areas ++] = handle->twoch_area_idx;
@@ -444,23 +573,37 @@ int main(int argc, char* argv[])
 
                     if (opts.output_iso)
                     {
-
                         uint32_t total_sectors = sacd_get_total_sectors(sacd_reader);
+                        uint32_t content_end = get_content_end_lsn(handle);
+                        uint32_t extract_sectors = total_sectors;
+                        
+                        // Use corrected sector count if Track_Area_End_Address extends beyond server-reported size
+                        // Per Super Audio CD System Description (Scarlet Book) Part 2 Section 3.2.1.2.14:
+                        // Track_Area_End_Address contains the LSN of the last sector in the Track Area
+                        // Note: content_end is Track_Area_End_Address (LSN), convert to sector count (LSN + 1)
+                        if (content_end > 0 && content_end >= total_sectors) {
+                            extract_sectors = content_end + 1;  // Convert Track_Area_End_Address to sector count
+                        }
+                        
+                        float extract_mb = (float)((double) extract_sectors * SACD_LSN_SIZE / 1048576.00);
+                        safe_fwprintf(stdout, L"Extracting %.1fMB (full disc) to ISO\n", extract_mb);
+                        
+                        total_sectors = extract_sectors;
 #ifdef SECTOR_LIMIT
 #define FAT32_SECTOR_LIMIT 2090000
                         uint32_t sector_size = FAT32_SECTOR_LIMIT;
                         uint32_t sector_offset = 0;
-                        if (total_sectors > FAT32_SECTOR_LIMIT)
+                        if (extract_sectors > FAT32_SECTOR_LIMIT)
                         {
                             musicfilename = (char *) malloc(512);
                             file_path = make_filename(opts.output_dir, 0, albumdir, "iso");
-                            for (i = 1; total_sectors != 0; i++)
+                            for (i = 1; extract_sectors != 0; i++)
                             {
-                                sector_size = min(total_sectors, FAT32_SECTOR_LIMIT);
+                                sector_size = min(extract_sectors, FAT32_SECTOR_LIMIT);
                                 snprintf(musicfilename, 512, "%s.%03d", file_path, i);
                                 scarletbook_output_enqueue_raw_sectors(output, sector_offset, sector_size, musicfilename, "iso");
                                 sector_offset += sector_size;
-                                total_sectors -= sector_size;
+                                extract_sectors -= sector_size;
                             }
                             free(musicfilename);
                         }
@@ -468,7 +611,7 @@ int main(int argc, char* argv[])
 #endif
                         {
                             file_path = get_unique_path(opts.output_dir, albumdir, "iso");
-                            scarletbook_output_enqueue_raw_sectors(output, 0, total_sectors, file_path, "iso");
+                            scarletbook_output_enqueue_raw_sectors(output, 0, extract_sectors, file_path, "iso");
 
 
                             // Concurrent iso+dsf/dsdiff generation
@@ -478,6 +621,41 @@ int main(int argc, char* argv[])
                                 safe_fwprintf(stdout, L"ISO output: %ls\n", s_wchar);
                                 free(s_wchar);
                                 free(file_path);
+
+                                // Show area-specific extraction info when extracting specific areas
+                                if (n_areas > 0)
+                                {
+                                    for (j = 0; j < n_areas; j++)
+                                    {
+                                        int area_idx_val = area_idx[j];
+                                        char *area_type = (area_idx_val == handle->twoch_area_idx) ? "stereo" : "multi-channel";
+                                        
+                                        uint32_t area_sectors;
+                                        char track_info[256] = "";
+                                        
+                                        if (opts.select_tracks)
+                                        {
+                                            area_sectors = get_selected_tracks_sectors(handle, area_idx_val);
+                                            format_track_list_message(track_info, sizeof(track_info));
+                                        }
+                                        else
+                                        {
+                                            area_sectors = get_area_sectors(handle, area_idx_val);
+                                            strcpy(track_info, "all tracks");
+                                        }
+                                        
+                                        float area_mb = (float)((double) area_sectors * SACD_LSN_SIZE / 1048576.00);
+                                        
+                                        if (strlen(track_info) > 0)
+                                        {
+                                            safe_fwprintf(stdout, L"Extracting %.1fMB of %hs content (%hs).\n", area_mb, area_type, track_info);
+                                        }
+                                        else
+                                        {
+                                            safe_fwprintf(stdout, L"Extracting %.1fMB of %hs content.\n", area_mb, area_type);
+                                        }
+                                    }
+                                }
 
                                 char *albumdir_loc;
                                 albumdir_loc = (char *)malloc(strlen(albumdir)+16);
@@ -555,6 +733,41 @@ int main(int argc, char* argv[])
                     // Non-concurrent dsf/dsdiff generation
                     else if (!(opts.output_iso && opts.concurrent) && (opts.output_dsf || opts.output_dsdiff))
                     {
+                        // Show area-specific extraction info when extracting specific areas
+                        if (n_areas > 0)
+                        {
+                            for (j = 0; j < n_areas; j++)
+                            {
+                                int area_idx_val = area_idx[j];
+                                char *area_type = (area_idx_val == handle->twoch_area_idx) ? "stereo" : "multi-channel";
+                                
+                                uint32_t area_sectors;
+                                char track_info[256] = "";
+                                
+                                if (opts.select_tracks)
+                                {
+                                    area_sectors = get_selected_tracks_sectors(handle, area_idx_val);
+                                    format_track_list_message(track_info, sizeof(track_info));
+                                }
+                                else
+                                {
+                                    area_sectors = get_area_sectors(handle, area_idx_val);
+                                    strcpy(track_info, "all tracks");
+                                }
+                                
+                                float area_mb = (float)((double) area_sectors * SACD_LSN_SIZE / 1048576.00);
+                                
+                                if (strlen(track_info) > 0)
+                                {
+                                    safe_fwprintf(stdout, L"Extracting %.1fMB of %hs content (%hs).\n", area_mb, area_type, track_info);
+                                }
+                                else
+                                {
+                                    safe_fwprintf(stdout, L"Extracting %.1fMB of %hs content.\n", area_mb, area_type);
+                                }
+                            }
+                        }
+                        
                         char *albumdir_loc;
                         albumdir_loc = (char *)malloc(strlen(albumdir)+16);
 

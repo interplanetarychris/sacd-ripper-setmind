@@ -580,8 +580,44 @@ static void *processing_thread(void *arg)
                     // update statistics
                     if (output->stats_progress_callback)
                     {
+                        // Determine track name, number, and progress based on current processing context
+                        char *current_track_name = "";
+                        int current_track_number = 0;
+                        int is_iso_processing = 0;
+                        uint32_t current_file_total_sectors = 0;
+                        uint32_t current_file_sectors_processed = 0;
+                        
+                        if (ft_sub != NULL) {
+                            // Processing a sub-track (DSF/DSDIFF track) - calculate progress relative to track
+                            current_track_name = ft_sub->filename;
+                            current_track_number = ft_sub->track + 1;  // Convert 0-based to 1-based
+                            is_iso_processing = 0;
+                            current_file_total_sectors = ft_sub->length_lsn;
+                            // Calculate sectors processed within this specific track
+                            current_file_sectors_processed = (ft->current_lsn > ft_sub->start_lsn) ? 
+                                (ft->current_lsn - ft_sub->start_lsn) : 0;
+                            // Clamp to track length to prevent >100%
+                            if (current_file_sectors_processed > ft_sub->length_lsn)
+                                current_file_sectors_processed = ft_sub->length_lsn;
+                        } else if (ft->handler.flags & OUTPUT_FLAG_RAW) {
+                            // Processing ISO - use overall file progress
+                            current_track_name = ft->filename;
+                            current_track_number = 0;  // ISO doesn't have track numbers
+                            is_iso_processing = 1;
+                            current_file_total_sectors = output->stats_current_file_total_sectors;
+                            current_file_sectors_processed = output->stats_current_file_sectors_processed;
+                        } else {
+                            // Processing main format - use overall file progress
+                            current_track_name = ft->filename;
+                            current_track_number = output->stats_current_track;
+                            is_iso_processing = 0;
+                            current_file_total_sectors = output->stats_current_file_total_sectors;
+                            current_file_sectors_processed = output->stats_current_file_sectors_processed;
+                        }
+                        
                         output->stats_progress_callback(output->stats_total_sectors, output->stats_total_sectors_processed, 
-                            output->stats_current_file_total_sectors, output->stats_current_file_sectors_processed);
+                            current_file_total_sectors, current_file_sectors_processed,
+                            0, 0, 0, 0, 0, 0, current_track_name, current_track_number, is_iso_processing);
                     }
                 }
                 else

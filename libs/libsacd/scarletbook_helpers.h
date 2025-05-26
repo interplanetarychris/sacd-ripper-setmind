@@ -56,6 +56,44 @@ static inline area_toc_t* get_multi_channel(scarletbook_handle_t *handle)
     return(handle->mulch_area_idx == -1 ? 0 : handle->area[handle->mulch_area_idx].area_toc);
 }
 
+static inline uint32_t get_content_end_lsn(scarletbook_handle_t *handle)
+{
+    uint32_t max_end_lsn = 0;
+    
+    // Find the highest Track_Area_End_Address from all audio areas.
+    // Per Super Audio CD System Description (commonly known as "Scarlet Book"), 
+    // Part 2: Audio Specification, Version 2.0 of March 2004, Section 3.2.1.2.14:
+    // Track_Area_End_Address contains the LSN of the last sector in the Track Area.
+    if (has_two_channel(handle))
+    {
+        area_toc_t *toc = get_two_channel(handle);
+        if (toc && toc->track_end > max_end_lsn)
+            max_end_lsn = toc->track_end;
+    }
+    
+    if (has_multi_channel(handle))
+    {
+        area_toc_t *toc = get_multi_channel(handle);
+        if (toc && toc->track_end > max_end_lsn)
+            max_end_lsn = toc->track_end;
+    }
+    
+    return max_end_lsn;
+}
+
+static inline uint32_t get_area_sectors(scarletbook_handle_t *handle, int area_idx)
+{
+    if (area_idx < 0 || area_idx >= handle->area_count)
+        return 0;
+    
+    area_toc_t *toc = handle->area[area_idx].area_toc;
+    if (!toc)
+        return 0;
+    
+    // Calculate total sectors for this area based on track range
+    return toc->track_end - toc->track_start;
+}
+
 char *get_speaker_config_string(area_toc_t *);
 
 char *get_frame_format_string(area_toc_t *);

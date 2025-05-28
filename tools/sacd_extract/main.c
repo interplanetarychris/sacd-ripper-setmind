@@ -518,6 +518,12 @@ int main(int argc, char* argv[])
 
         if(!nogo){
             nogo = !(sacd_reader = sacd_open(opts.input_device)) ;
+            if (nogo && strchr(opts.input_device, ':')) {
+                fprintf(stderr, "Network connection failed. This could be disc-specific if other SACDs work.\n");
+                fprintf(stderr, "Try: 1) Check if this exact SACD works on other devices\n");
+                fprintf(stderr, "     2) Verify server is accessible with other SACDs\n");
+                fprintf(stderr, "     3) Check for physical disc damage or compatibility issues\n");
+            }
         }
 
         if (!nogo) 

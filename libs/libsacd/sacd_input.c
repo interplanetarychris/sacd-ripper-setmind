@@ -358,7 +358,7 @@ static sacd_input_t sacd_net_input_open(const char *target)
             atoi(strchr(target, ':') + 1), &tm);
     if (err)
     {
-        fprintf(stderr, "Failed to connect\n");
+        fprintf(stderr, "Failed to connect to %s: %s\n", target, err);
         goto error;
     }
     socket_setblocking(&dev->fd);
@@ -371,7 +371,7 @@ static sacd_input_t sacd_net_input_open(const char *target)
 
     if (!pb_encode(&output, ServerRequest_fields, &request))
     {
-        fprintf(stderr, "Failed to encode request\n");
+        fprintf(stderr, "Failed to encode DISC_OPEN request to %s\n", target);
         goto error;
     }
 
@@ -380,13 +380,29 @@ static sacd_input_t sacd_net_input_open(const char *target)
 
     if (!pb_decode(&input, ServerResponse_fields, &response))
     {
-        fprintf(stderr, "Failed to decode response\n");
+        fprintf(stderr, "Failed to decode response from %s (connection/protocol error)\n", target);
         goto error;
     }
 
     if (response.result != 0 || response.type != ServerResponse_Type_DISC_OPENED)
     {
-        fprintf(stderr, "Response result non-zero or disc opened\n");
+        const char *type_name = "UNKNOWN";
+        switch (response.type) {
+            case ServerResponse_Type_DISC_OPENED: type_name = "DISC_OPENED"; break;
+            case ServerResponse_Type_DISC_CLOSED: type_name = "DISC_CLOSED"; break;
+            case ServerResponse_Type_DISC_READ: type_name = "DISC_READ"; break;
+            case ServerResponse_Type_DISC_SIZE: type_name = "DISC_SIZE"; break;
+        }
+        
+        if (response.result != 0) {
+            fprintf(stderr, "Server response error: result=%lld (expected 0)\n", (long long)response.result);
+            fprintf(stderr, "This may indicate the server cannot access this specific SACD.\n");
+            fprintf(stderr, "The disc may be damaged, incompatible, or unsupported by the server hardware.\n");
+        }
+        if (response.type != ServerResponse_Type_DISC_OPENED) {
+            fprintf(stderr, "Server response type error: got %s (%d), expected DISC_OPENED (%d)\n", 
+                   type_name, response.type, ServerResponse_Type_DISC_OPENED);
+        }
         goto error;
     }
 
